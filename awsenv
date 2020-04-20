@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import sys
+from botocore.exceptions import ClientError, InvalidConfigError
+from botocore.session import Session
+from botocore.configloader import raw_config_parse
+
+def get_profiles():
+    try:
+        aws_profiles = Session().available_profiles
+        return aws_profiles
+    except Exception as e:
+        print(f'get_profiles failed with {e.__class__.__name__}: {e}',
+                file=sys.stderr)
+
+def get_credentials(profile):
+    try:
+        session = Session(profile=profile)
+        credentials = session.get_credentials().get_frozen_credentials()
+        return [c for c in credentials]
+    except (ClientError, InvalidConfigError):
+        awsconf = raw_config_parse('~/.aws/config')
+        source = awsconf.get(f'profile {profile}').get('source_profile')
+        try:
+            os.system(f'aws-mfa --profile {source}')
+            return get_credentials(profile)
+        except OSError as e:
+            print(f'could not execute aws-mfa: {os.strerror(e.errno)}',
+                    file=sys.stderr)
+            sys.exit(1)
+    except Exception as e:
+        print(f'get_credentials failed with {e.__class__.__name__}: {e}',
+                file=sys.stderr)
+        sys.exit(1)
+
+def process_args():
+    parser = argparse.ArgumentParser(
+        description='Run commands against different AWS roles/profiles',
+        prog='awsenv',
+        usage='\n   %(prog)s <profile>'
+              '\n   %(prog)s <profile> -- bash'
+              '\n   %(prog)s <profile> -- aws s3 ls')
+    parser.add_argument(
+        'profile', choices=get_profiles(),
+        help='the profile to use to assume role and return credentials')
+    parser.add_argument(
+        'command', nargs='*',
+        help='execute a command with required AWS environment variables')
+    return parser.parse_args()
+
+def main():
+    evars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']
+    args = process_args()
+
+    creds = list(zip(evars, get_credentials(args.profile)))
+
+    if not args.command:
+        for k, v in creds: print(f'export {k}="{v}"')
+        sys.exit(0)
+
+    name = os.path.basename(__file__)
+    sh_green = '\[$(tput setaf 2)\]'
+    sh_reset = '\[$(tput sgr0)\]'
+    os.environ['PS1'] = f'[\\u@{sh_green}{name}/{args.profile}{sh_reset} \\W]\\$ '
+
+    for k, v in creds: os.environ[k] = str(v)
+
+    try:
+        os.execvp(args.command[0], args.command)
+    except OSError as e:
+        print(f'Could not execute "{args.command[0]}": {os.strerror(e.errno)}',
+                file=sys.stderr)
+        sys.exit(1)
+
+main()
