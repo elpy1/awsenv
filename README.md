@@ -2,7 +2,7 @@
 Run commands or return credentials for different AWS profiles/roles
 
 ## Info
-Tool I use in conjuction with `aws-mfa` to improve workflow. Can be used to return AWS credentials when assuming role or run commands with required environment variables set. If you run `bash` you'll have `PS1` set in your environment to indicate the AWS environment you're working in. Will execute `aws-mfa` to re-prompt for mfa if command fails.
+Tool I use in conjuction with `aws-mfa` to improve workflow. Can be used to return AWS assumerole credentials or run commands with required environment variables set. If you run `bash` you'll have `PS1` set in your environment (with `awsenv/profile` in green) to indicate the account you're working in. Will execute `aws-mfa` to re-prompt for mfa if command fails.
 
 ### Requirements
 - awscli
