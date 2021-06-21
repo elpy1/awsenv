@@ -2,75 +2,77 @@
 import argparse
 import os
 import sys
-from botocore.exceptions import ClientError, InvalidConfigError
-from botocore.session import Session
+
 from botocore.configloader import raw_config_parse
+from botocore.session import Session
+from botocore.exceptions import ClientError, InvalidConfigError
+from botocore.exceptions import SSOTokenLoadError, UnauthorizedSSOTokenError
+
 
 def get_profiles():
-    try:
-        aws_profiles = Session().available_profiles
-        return aws_profiles
-    except Exception as e:
-        print(f'get_profiles failed with {e.__class__.__name__}: {e}',
-                file=sys.stderr)
+    return Session().available_profiles
+
 
 def get_credentials(profile):
+    AWS_CONF = '~/.aws/config'
+    AWS_VARS = ['AWS_ACCESS_KEY_ID',
+                'AWS_SECRET_ACCESS_KEY',
+                'AWS_SESSION_TOKEN']
+
     try:
         session = Session(profile=profile)
         credentials = session.get_credentials().get_frozen_credentials()
-        return [(c or '') for c in credentials]
-    except (ClientError, InvalidConfigError):
-        awsconf = raw_config_parse('~/.aws/config')
-        source = awsconf.get(f'profile {profile}').get('source_profile')
+    except (SSOTokenLoadError, UnauthorizedSSOTokenError):
         try:
-            os.system(f'aws-mfa --profile {source}')
+            os.system(f'aws --profile {profile} sso login')
             return get_credentials(profile)
-        except OSError as e:
-            print(f'could not execute aws-mfa: {os.strerror(e.errno)}',
-                    file=sys.stderr)
-            sys.exit(1)
+        except Exception as e:
+            raise SystemExit(f'aws sso login failed with: {e.__class__.__name__}: {e}')
     except Exception as e:
-        print(f'get_credentials failed with {e.__class__.__name__}: {e}',
-                file=sys.stderr)
-        sys.exit(1)
+        raise SystemExit(f'get_credentials failed with {e.__class__.__name__}: {e}')
+    else:
+        return list(zip(AWS_VARS, [(c or '') for c in credentials]))
 
-def process_args():
-    parser = argparse.ArgumentParser(
-        description='Run commands against different AWS roles/profiles',
-        prog='awsenv',
-        usage='\n   %(prog)s <profile>'
-              '\n   %(prog)s <profile> -- bash'
-              '\n   %(prog)s <profile> -- aws s3 ls')
-    parser.add_argument(
-        'profile', choices=get_profiles(),
-        help='the profile to use to assume role and return credentials')
-    parser.add_argument(
-        'command', nargs='*',
-        help='execute a command with required AWS environment variables')
-    return parser.parse_args()
 
-def main():
-    evars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']
-    args = process_args()
+def exec_sh(profile, cmd, creds):
+    NAME = os.path.basename(__file__)
+    GREEN = '\[$(tput setaf 2)\]'
+    RESET = '\[$(tput sgr0)\]'
+    os.environ['PS1'] = f'[\\u@{GREEN}{NAME}/{profile}{RESET} \\W]\\$ '
 
-    creds = list(zip(evars, get_credentials(args.profile)))
-
-    if not args.command:
-        for k, v in creds: print(f'export {k}="{v}"')
-        sys.exit(0)
-
-    name = os.path.basename(__file__)
-    sh_green = '\[$(tput setaf 2)\]'
-    sh_reset = '\[$(tput sgr0)\]'
-    os.environ['PS1'] = f'[\\u@{sh_green}{name}/{args.profile}{sh_reset} \\W]\\$ '
-
-    for k, v in creds: os.environ[k] = str(v)
+    for k, v in creds:
+        os.environ[k] = str(v)
 
     try:
-        os.execvp(args.command[0], args.command)
+        os.execvp(cmd[0], cmd)
     except OSError as e:
-        print(f'Could not execute "{args.command[0]}": {os.strerror(e.errno)}',
-                file=sys.stderr)
-        sys.exit(1)
+        raise SystemExit(f"error executing '{args.command[0]}': {os.strerror(e.errno)}")
+
+
+def process_args():
+    ap = argparse.ArgumentParser(
+        prog='awsenv',
+        description='run a command using a configured AWS profile',
+        usage='%(prog)s <profile> [--] [<command>]'
+    )
+
+    ap.add_argument('profile', choices=get_profiles(),
+                        help='the AWS profile to use')
+    ap.add_argument('command', nargs=argparse.REMAINDER,
+                        help='the command to execute')
+
+    return ap.parse_args()
+
+
+def main():
+    args = process_args()
+    creds = get_credentials(args.profile)
+
+    if args.command:
+        exec_sh(args.profile, args.command, creds)
+    else:
+        for k, v in creds:
+            print(f'export {k}="{v}"')
+
 
 main()
