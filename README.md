@@ -1,23 +1,22 @@
 # awsenv
-Run commands or return credentials for different AWS profiles/roles
+Run a command or return credentials for configured AWS CLI profiles (AWS SSO, assume-role)
 
 ## Info
-Tool I use in conjuction with `aws-mfa` to improve workflow. Can be used to return AWS assumerole credentials or run commands with required environment variables set. If you run `bash` you'll have `PS1` set in your environment (with `awsenv/profile` in green) to indicate the account you're working in. Will execute `aws-mfa` to re-prompt for mfa if command fails.
+Tool I use daily in conjunction with other tools such as `packer` or `terraform`. Can be used either to return AWS short-term credentials or run commands against a configured AWS profile (with required environment variables set). If you execute `bash`, the script sets `PS1` in your environment (with `awsenv/profile` in green) to indicate the AWS profile you're working with. If your AWS SSO credentials are expired the script runs `aws sso login` automatically.
 
-### Requirements
-- awscli
-- aws-mfa -> https://github.com/broamski/aws-mfa
+## Requirements
+- `python3`
+- `aws` (https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html#cliv2-linux-install)
 
-### Installation
-- git clone
+## Installation
+- clone this `git` repo or download `awsenv`
 - move `awsenv` to `~/.local/bin` or similar
-- add directory to path if need `export PATH="$HOME/.local/bin${PATH:+:${PATH}}"`
-- configure `~/.aws/{config,credentials}`. If using MFA, follow `aws-mfa` documentation
+- add to path if need `export PATH="$HOME/.local/bin${PATH:+:${PATH}}"`
 
 ## Examples
 
 ### Config
-example commands below are executed with the following configuration (see aws-mfa):
+example commands below are executed using the following configuration (see aws-mfa):
 ```
 [elpy1@testbox ~]$ cat ~/.aws/credentials 
 [testauth-long-term]
