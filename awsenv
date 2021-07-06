@@ -46,7 +46,7 @@ def exec_sh(profile, cmd, creds):
     try:
         os.execvp(cmd[0], cmd)
     except OSError as e:
-        raise SystemExit(f"error executing '{args.command[0]}': {os.strerror(e.errno)}")
+        raise SystemExit(f"error executing '{cmd[0]}': {os.strerror(e.errno)}")
 
 
 def process_args():
